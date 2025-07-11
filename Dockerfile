@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm i
 
 # Copy source code
 COPY . .
@@ -19,7 +19,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # Expose the port
-EXPOSE 3010
+EXPOSE 3000
 
 # Start the server
 CMD ["npm", "start"] 
