@@ -1,0 +1,52 @@
+Title: Radiation Therapy in Breast Cancer Management
+
+Introduction:
+Radiation therapy plays a crucial role in the multidisciplinary approach to breast cancer treatment. This article focuses on the specific aspects of radiation therapy relevant to radiation oncologists.
+
+Key Topics:
+1. Indications for Radiation
+   - Post-lumpectomy treatment
+   - Post-mastectomy indications
+   - Locally advanced disease
+
+2. Treatment Planning
+   - Target volume definition
+   - Heart sparing techniques
+   - Lung dose considerations
+   - Treatment field setup
+
+3. Modern Techniques
+   - Intensity-modulated radiation therapy (IMRT)
+   - Deep inspiration breath-hold (DIBH)
+   - Prone positioning
+   - Partial breast irradiation
+
+4. Dose and Fractionation
+   - Standard whole breast irradiation
+   - Hypofractionated regimens
+   - Accelerated partial breast irradiation
+   - Dose constraints for organs-at-risk
+
+5. Side Effects and Management
+   - Acute skin reactions
+   - Late cardiac effects
+   - Pulmonary toxicity
+   - Fibrosis and other long-term effects
+
+6. Special Considerations
+   - Left-sided breast cancer
+   - Large-breasted patients
+   - Post-surgical reconstruction
+   - Lymphedema prevention
+
+7. Clinical Trials and Research
+   - Ongoing studies in breast radiation
+   - Emerging technologies
+   - Future directions in treatment
+
+8. Follow-up and Survivorship
+   - Long-term monitoring
+   - Quality of life considerations
+   - Survivorship care planning
+
+This document provides a comprehensive guide for radiation oncologists in the management of breast cancer patients using radiation therapy.
