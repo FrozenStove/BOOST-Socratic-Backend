@@ -32,11 +32,11 @@ spec:
           image: gcr.io/ucsf-medical-education-app/github.com/frozenstove/boost-socratic-backend:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - containerPort: 3010
           readinessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 3010
             initialDelaySeconds: 5
             periodSeconds: 5
           env:
