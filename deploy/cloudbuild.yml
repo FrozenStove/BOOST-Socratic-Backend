@@ -27,13 +27,13 @@ steps:
         "get-credentials",
         "deployment-1-cluster",
         "--zone",
-        "us-central1-c",
+        "us-central1",
       ]
 
   # 4. Deploy to GKE (substitute image tag)
   - name: "gcr.io/cloud-builders/kubectl"
     env:
-      - "CLOUDSDK_COMPUTE_ZONE=us-central1-c"
+      - "CLOUDSDK_COMPUTE_ZONE=us-central1"
       - "CLOUDSDK_CONTAINER_CLUSTER=deployment-1-cluster"
     args:
       [
