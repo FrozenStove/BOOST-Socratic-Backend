@@ -44,7 +44,7 @@ steps:
         "-n",
         "default",
       ]
-logsBucket: "gs:// ucsf-medical-education-app-build-logs"
+logsBucket: "gs://ucsf-medical-education-app-build-logs"
 
 # substitutions:
 #   _COMMIT_SHA: '${SHORT_SHA}'
