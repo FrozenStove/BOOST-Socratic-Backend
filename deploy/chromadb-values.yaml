@@ -1,0 +1,35 @@
+# ChromaDB Helm values for CORS and authentication configuration
+env:
+  - name: CHROMA_SERVER_CORS_ALLOW_ORIGINS
+    value: "*"  # Allow all origins for development, restrict this in production
+  - name: CHROMA_SERVER_CORS_ALLOW_CREDENTIALS
+    value: "true"
+  - name: CHROMA_SERVER_CORS_ALLOW_HEADERS
+    value: "*"
+  - name: CHROMA_SERVER_CORS_ALLOW_METHODS
+    value: "*"
+
+# Authentication settings (if needed)
+auth:
+  enabled: false  # Disable authentication for now to simplify debugging
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+# Persistence
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+
+# Resources
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m" 
