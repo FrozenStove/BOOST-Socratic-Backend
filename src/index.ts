@@ -11,8 +11,11 @@ const port = config.get('port') || 3010;
 app.use(cors());
 app.use(express.json());
 
-// Initialize services
-initializeChromaDB();
+// Initialize services (blocking - server won't start if ChromaDB is unavailable)
+initializeChromaDB().catch((error) => {
+    console.error('Failed to initialize ChromaDB, shutting down:', error.message);
+    process.exit(1);
+});
 
 // Setup routes
 setupRoutes(app);
@@ -45,4 +48,25 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 
 app.listen(port, () => {
     console.log(`\nServer is running on port ${port}`);
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
 }); 
