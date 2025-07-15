@@ -14,23 +14,11 @@ model User {
   id        String   @id @default(cuid())
   username  String   @unique
   password  String
-  tokens    Token[]
   chats     Chat[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("users")
-}
-
-model Token {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@map("tokens")
 }
 
 model Article {
