@@ -42,6 +42,11 @@ spec:
                   key: url
             - name: CHROMA_DB_URL
               value: "http://chroma-chromadb:8000"
+            - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-password
+                key: token
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -86,4 +91,9 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: openai-api-key
+                  key: token
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-password
                   key: token

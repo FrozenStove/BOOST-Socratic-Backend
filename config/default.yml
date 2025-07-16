@@ -1,2 +1,4 @@
 chromaDbUrl: "http://localhost:8000"
+database: 
+  url: "postgresql://postgres:postgres@localhost:5432/postgres"
 port: 3010
