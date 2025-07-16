@@ -27,6 +27,33 @@ spec:
                   values:
                   - backend
               topologyKey: "kubernetes.io/hostname"
+      # Init container for database migrations
+      initContainers:
+        - name: db-migrate
+          image: gcr.io/ucsf-medical-education-app/github.com/frozenstove/boost-socratic-backend:latest
+          imagePullPolicy: Always
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: url
+            - name: CHROMA_DB_URL
+              value: "http://chroma-chromadb:8000"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Running database migrations..."
+              npm run db:generate
+              npm run db:migrate:deploy
+              echo "Migrations completed successfully"
       containers:
         - name: backend
           image: gcr.io/ucsf-medical-education-app/github.com/frozenstove/boost-socratic-backend:latest
@@ -48,6 +75,11 @@ spec:
               value: production
             - name: PORT
               value: "3000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: url
             - name: CHROMA_DB_URL
               value: "http://chroma-chromadb:8000"
             - name: OPENAI_API_KEY
