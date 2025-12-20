@@ -1,0 +1,5 @@
+chromaDbUrl: "http://chromadb:8000"
+database:
+  url: "postgresql://postgres:postgres@postgres:5432/postgres"
+port: 3010
+
