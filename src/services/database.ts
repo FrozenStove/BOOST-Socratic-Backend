@@ -4,28 +4,42 @@ import config from "config";
 let prisma: PrismaClient | null = null;
 
 export const initializeDatabase = async (): Promise<void> => {
-  try {
-    const databaseUrl = config.get<string>("database.url");
+  const databaseUrl = config.get<string>("database.url") || process.env.DATABASE_URL;
 
-    if (!databaseUrl) {
-      throw new Error("DATABASE_URL not configured");
-    }
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL not configured");
+  }
 
-    prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: databaseUrl,
+  const maxRetries = 10;
+  const retryDelay = 3000; // 3 seconds
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: databaseUrl,
+          },
         },
-      },
-    });
+      });
 
-    // Test the connection
-    await prisma.$connect();
-    console.log("Database initialized successfully");
-  } catch (error) {
-    console.error("Failed to initialize database:", error);
-    prisma = null;
-    throw error;
+      // Test the connection
+      await prisma.$connect();
+      console.log("Database initialized successfully");
+      return;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        console.error(`Failed to initialize database after ${maxRetries} attempts:`, error);
+        prisma = null;
+        throw error;
+      }
+      console.log(`Database connection attempt ${attempt}/${maxRetries} failed, retrying in ${retryDelay}ms...`);
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+        prisma = null;
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
   }
 };
 

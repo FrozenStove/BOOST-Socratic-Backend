@@ -5,24 +5,35 @@ let chromaClient: ChromaClient | null = null;
 let isInitialized = false;
 
 export const initializeChromaDB = async () => {
-    try {
-        if (!CHROMA_DB_URL) {
-            throw new Error('CHROMA_DB_URL not configured');
+    if (!CHROMA_DB_URL) {
+        throw new Error('CHROMA_DB_URL not configured');
+    }
+
+    const maxRetries = 10;
+    const retryDelay = 3000; // 3 seconds
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            // ChromaClient accepts URL directly for remote servers
+            chromaClient = new ChromaClient({
+                path: CHROMA_DB_URL.startsWith('http') ? CHROMA_DB_URL : `http://${CHROMA_DB_URL}`
+            });
+
+            // Test the connection
+            await chromaClient.heartbeat();
+            isInitialized = true;
+            console.log('ChromaDB initialized successfully');
+            return;
+        } catch (error) {
+            if (attempt === maxRetries) {
+                console.error(`Failed to initialize ChromaDB after ${maxRetries} attempts:`, error);
+                chromaClient = null;
+                isInitialized = false;
+                throw error;
+            }
+            console.log(`ChromaDB connection attempt ${attempt}/${maxRetries} failed, retrying in ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
-
-        chromaClient = new ChromaClient({
-            path: CHROMA_DB_URL
-        });
-
-        // Test the connection
-        await chromaClient.heartbeat();
-        isInitialized = true;
-        console.log('ChromaDB initialized successfully');
-    } catch (error) {
-        console.error('Failed to initialize ChromaDB:', error);
-        chromaClient = null;
-        isInitialized = false;
-        throw error; // Re-throw the error to cause startup failure
     }
 };
 
