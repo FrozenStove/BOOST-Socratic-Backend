@@ -1,5 +1,5 @@
-chromaDbUrl: "http://localhost:8000"
+chromaDbUrl: "http://chromadb:8000"
 database:
-  url: "postgresql://postgres:postgres@localhost:5432/postgres"
+  url: "postgresql://postgres:postgres@postgres:5432/postgres"
 port: 3010
 
