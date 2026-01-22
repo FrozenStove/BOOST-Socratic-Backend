@@ -1,3 +1,5 @@
-chromaDbUrl: "http://chroma-chromadb:8000"
+# Production configuration (for Google Cloud Run deployment)
+chromaDbUrl: "http://chromadb:8000"
 database:
-  url: "postgresql://postgres:${POSTGRES_PASSWORD}@34.59.62.222:5432/postgres"
+  url: "postgresql://postgres:postgres@postgres:5432/postgres"
+port: 3010
