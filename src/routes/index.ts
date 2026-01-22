@@ -2,6 +2,7 @@ import { Express } from "express";
 import chatRouter from "./chat";
 import articlesRouter from "./articles";
 import scriptsRouter, { verifyScriptsAuth } from "./scripts";
+import authRouter from "./auth";
 import { isChromaDBAvailable } from "../services/chroma";
 import { isDatabaseAvailable } from "../services/database";
 
@@ -28,6 +29,10 @@ export const setupRoutes = (app: Express) => {
       .json({ status: "healthy", timestamp: new Date().toISOString() });
   });
 
+  // Auth routes (public)
+  app.use("/api/auth", authRouter);
+  
+  // Protected routes
   app.use("/api/chat", chatRouter);
   app.use("/api/articles", articlesRouter);
   app.use("/api/scripts", verifyScriptsAuth, scriptsRouter);

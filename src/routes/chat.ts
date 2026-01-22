@@ -4,6 +4,8 @@ import { OpenAI } from 'openai';
 import { getChromaClient } from '../services/chroma';
 import { OpenAIEmbeddingFunction } from 'chromadb';
 import { OPENAI_API_KEY } from '../constants';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { getPrismaClient } from '../services/database';
 
 const chatRouter = Router();
 
@@ -38,12 +40,16 @@ const embeddingFunction = new OpenAIEmbeddingFunction({
 
 const chatRequestSchema = z.object({
     message: z.string().min(1),
-    context: z.array(z.string()).optional()
+    conversation: z.array(z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string()
+    })).optional()
 });
 
-chatRouter.post('/', async (req, res) => {
+chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
     try {
-        const { message, context } = chatRequestSchema.parse(req.body);
+        const { message, conversation } = chatRequestSchema.parse(req.body);
+        const userId = req.userId!; // Guaranteed by authenticateToken middleware
 
         console.log('🔍 Querying ChromaDB for:', message.substring(0, 100) + '...');
 
@@ -67,7 +73,7 @@ chatRouter.post('/', async (req, res) => {
         console.log('  - Has distances:', !!results.distances);
         console.log('  - Distances array length:', results.distances?.length || 0);
 
-        const documents = results.documents?.[0];
+        const documents = results.documents?.[0] || [];
         const distances = results.distances?.[0];
 
         if (documents && documents.length > 0) {
@@ -81,31 +87,62 @@ chatRouter.post('/', async (req, res) => {
         }
 
         // Prepare context from retrieved documents
-        const contextText = results.documents[0].join('\n\n');
+        const contextText = documents.length > 0 ? documents.join('\n\n') : 'No relevant documents found in the knowledge base.';
+
+        // Build messages array with conversation history
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+            {
+                role: "system",
+                content: DEFAULT_SYSTEM_PROMPT
+            }
+        ];
+
+        // Add conversation history if provided
+        if (conversation && conversation.length > 0) {
+            // Add last 10 messages to avoid token limits
+            const recentConversation = conversation.slice(-10);
+            recentConversation.forEach(msg => {
+                messages.push({
+                    role: msg.role === 'user' ? 'user' : 'assistant',
+                    content: msg.content
+                });
+            });
+        }
+
+        // Add current query with context
+        messages.push({
+            role: "user",
+            content: `Context from medical literature:\n${contextText}\n\nQuestion: ${message}`
+        });
 
         // Generate response using OpenAI
         const completion = await openai.chat.completions.create({
             model: "gpt-4",
-            messages: [
-                {
-                    role: "system",
-                    content: DEFAULT_SYSTEM_PROMPT
-                    // "You are a medical education assistant specializing in radiation oncology. Use the provided context to give accurate and educational responses."
-                },
-                {
-                    role: "user",
-                    content: `Context: ${contextText}\n\nQuestion: ${message}`
-                }
-            ],
+            messages: messages,
             temperature: 0.7,
         });
 
-        const response = completion.choices[0].message.content;
-        console.log('✅ Response generated successfully, length:', response?.length || 0);
+        const response = completion.choices[0].message.content || '';
+        console.log('✅ Response generated successfully, length:', response.length);
+
+        // Save chat log to database
+        const prisma = getPrismaClient();
+        try {
+            await prisma.chat.create({
+                data: {
+                    userId: userId,
+                    input: message,
+                    response: response
+                }
+            });
+        } catch (dbError) {
+            console.error('Failed to save chat log:', dbError);
+            // Don't fail the request if logging fails
+        }
 
         res.json({
             response: response,
-            context: results.documents[0]
+            context: documents
         });
     } catch (error) {
         console.error('Chat error:', error);

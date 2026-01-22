@@ -1,4 +1,9 @@
+# Default configuration (used for local development)
+# This is used when NODE_CONFIG_ENV is not set or set to 'default'
 chromaDbUrl: "http://localhost:8000"
-database: 
+database:
+  # Database URL - can be overridden by DATABASE_URL environment variable
+  # Or constructed from POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT
+  # Defaults match docker-compose.local-db.yml defaults (postgres:postgres@localhost:5432/postgres)
   url: "postgresql://postgres:postgres@localhost:5432/postgres"
 port: 3010
