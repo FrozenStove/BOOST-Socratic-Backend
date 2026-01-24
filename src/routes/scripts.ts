@@ -7,6 +7,13 @@ import { convertCheckResult, convertIngestResult, convertVerifyResult } from '..
 const scriptsRouter = Router();
 
 export async function verifyScriptsAuth(req: Request, res: Response, next: NextFunction) {
+    // Skip auth check in bypass mode
+    const DISABLE_AUTH = process.env.DISABLE_AUTH === 'true' || process.env.DISABLE_AUTH === '1';
+    if (DISABLE_AUTH) {
+        next();
+        return;
+    }
+    
     if (req.header('auth') !== "1234567890") {
         return res.status(401).json({ error: 'Unauthorized' });
     }

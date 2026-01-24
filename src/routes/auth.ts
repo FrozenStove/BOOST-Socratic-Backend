@@ -22,6 +22,11 @@ authRouter.post('/register', async (req: Request, res: Response) => {
   try {
     const { username, password } = registerSchema.parse(req.body);
     const prisma = getPrismaClient();
+    
+    if (!prisma) {
+      res.status(503).json({ error: 'Database not available. Auth features are disabled.' });
+      return;
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -78,6 +83,11 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   try {
     const { username, password } = loginSchema.parse(req.body);
     const prisma = getPrismaClient();
+    
+    if (!prisma) {
+      res.status(503).json({ error: 'Database not available. Auth features are disabled.' });
+      return;
+    }
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -133,6 +143,11 @@ authRouter.get('/me', async (req: Request, res: Response) => {
 
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     const prisma = getPrismaClient();
+    
+    if (!prisma) {
+      res.status(503).json({ error: 'Database not available. Auth features are disabled.' });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },

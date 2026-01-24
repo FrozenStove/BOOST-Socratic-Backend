@@ -11,22 +11,30 @@ export const setupRoutes = (app: Express) => {
   app.get("/health", (req, res) => {
     const chromaAvailable = isChromaDBAvailable();
     const databaseAvailable = isDatabaseAvailable();
+    const DISABLE_AUTH = process.env.DISABLE_AUTH === 'true' || process.env.DISABLE_AUTH === '1';
 
-    if (!chromaAvailable || !databaseAvailable) {
-      const reasons = [];
-      if (!chromaAvailable) reasons.push("ChromaDB not available");
-      if (!databaseAvailable) reasons.push("Database not available");
-
+    // In bypass mode, database is optional
+    if (!chromaAvailable) {
       return res.status(503).json({
         status: "unhealthy",
-        reason: reasons.join(", "),
+        reason: "ChromaDB not available",
         timestamp: new Date().toISOString(),
       });
     }
 
-    res
-      .status(200)
-      .json({ status: "healthy", timestamp: new Date().toISOString() });
+    if (!DISABLE_AUTH && !databaseAvailable) {
+      return res.status(503).json({
+        status: "unhealthy",
+        reason: "Database not available",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    res.status(200).json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      bypassMode: DISABLE_AUTH || false
+    });
   });
 
   // Auth routes (public)

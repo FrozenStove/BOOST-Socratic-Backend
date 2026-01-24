@@ -12,11 +12,29 @@ const port = config.get("port") || 3010;
 app.use(cors());
 app.use(express.json());
 
-// Initialize services (blocking - server won't start if services are unavailable)
-Promise.all([initializeChromaDB(), initializeDatabase()]).catch((error) => {
-  console.error("Failed to initialize services, shutting down:", error.message);
-  process.exit(1);
-});
+// Initialize services
+// In bypass mode (DISABLE_AUTH), database initialization is optional
+const DISABLE_AUTH = process.env.DISABLE_AUTH === 'true' || process.env.DISABLE_AUTH === '1';
+
+if (DISABLE_AUTH) {
+  console.log('⚠️  BYPASS MODE ENABLED - Database connection is optional');
+  // Only initialize ChromaDB, database is optional in bypass mode
+  Promise.all([initializeChromaDB(), initializeDatabase().catch((error) => {
+    console.warn("⚠️  Database initialization failed (non-blocking in bypass mode):", error.message);
+    console.warn("   Server will continue without database connection");
+  })]).then(() => {
+    console.log("✅ Services initialized (database may be unavailable)");
+  }).catch((error) => {
+    console.error("Failed to initialize ChromaDB, shutting down:", error.message);
+    process.exit(1);
+  });
+} else {
+  // Normal mode - both services are required
+  Promise.all([initializeChromaDB(), initializeDatabase()]).catch((error) => {
+    console.error("Failed to initialize services, shutting down:", error.message);
+    process.exit(1);
+  });
+}
 
 // Setup routes
 setupRoutes(app);

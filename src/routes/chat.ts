@@ -49,13 +49,14 @@ const chatRequestSchema = z.object({
 chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
     try {
         const { message, conversation } = chatRequestSchema.parse(req.body);
-        const userId = req.userId!; // Guaranteed by authenticateToken middleware
+        const userId = req.userId!; // Guaranteed by authenticateToken middleware (or bypass)
 
         console.log('🔍 Querying ChromaDB for:', message.substring(0, 100) + '...');
 
         // Get relevant documents from ChromaDB
+        // Use getOrCreateCollection to handle case where collection doesn't exist yet
         const chromaClient = getChromaClient();
-        const collection = await chromaClient.getCollection({
+        const collection = await chromaClient.getOrCreateCollection({
             name: 'medical_articles',
             embeddingFunction
         });
@@ -84,10 +85,15 @@ chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
             }
         } else {
             console.log('  ⚠️ No documents found in results!');
+            console.log('  💡 Tip: Run article ingestion to populate the knowledge base');
+            console.log('     API: GET /api/scripts/ingest');
+            console.log('     CLI: npm run ingest');
         }
 
         // Prepare context from retrieved documents
-        const contextText = documents.length > 0 ? documents.join('\n\n') : 'No relevant documents found in the knowledge base.';
+        const contextText = documents.length > 0 
+            ? documents.join('\n\n') 
+            : 'No relevant documents found in the knowledge base. The knowledge base may be empty - articles need to be ingested first.';
 
         // Build messages array with conversation history
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -125,19 +131,23 @@ chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
         const response = completion.choices[0].message.content || '';
         console.log('✅ Response generated successfully, length:', response.length);
 
-        // Save chat log to database
-        const prisma = getPrismaClient();
-        try {
-            await prisma.chat.create({
-                data: {
-                    userId: userId,
-                    input: message,
-                    response: response
+        // Save chat log to database (skip if in bypass mode or database unavailable)
+        if (userId !== 'bypass-user-id') {
+            const prisma = getPrismaClient();
+            if (prisma) {
+                try {
+                    await prisma.chat.create({
+                        data: {
+                            userId: userId,
+                            input: message,
+                            response: response
+                        }
+                    });
+                } catch (dbError) {
+                    console.error('Failed to save chat log:', dbError);
+                    // Don't fail the request if logging fails
                 }
-            });
-        } catch (dbError) {
-            console.error('Failed to save chat log:', dbError);
-            // Don't fail the request if logging fails
+            }
         }
 
         res.json({
