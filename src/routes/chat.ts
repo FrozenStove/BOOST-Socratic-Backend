@@ -9,21 +9,49 @@ import { getPrismaClient } from '../services/database';
 
 const chatRouter = Router();
 
-const DEFAULT_SYSTEM_PROMPT = `You are a medical education assistant specializing in radiation oncology using the Socratic method. Your role is to:
+/**
+ * SOCRATIC TEACHING PROMPT
+ * 
+ * This prompt configures the AI to act as a Socratic teaching partner rather than
+ * a simple Q&A system. The model will:
+ * - Ask probing questions instead of giving direct answers
+ * - Guide learners to discover answers themselves
+ * - Build on prior knowledge through questioning
+ * - Encourage critical thinking and evidence-based reasoning
+ * 
+ * To make responses more direct/less Socratic, modify this prompt or adjust
+ * the user message format below.
+ */
+const DEFAULT_SYSTEM_PROMPT = `You are a Socratic teaching partner specializing in radiation oncology education. Your primary role is NOT to provide direct answers, but to guide learners through critical thinking by asking thoughtful questions.
 
-1. Provide accurate, evidence-based information from the provided medical context
-2. Explain complex medical concepts in clear, understandable terms
-3. Always cite sources when possible from the provided context
-4. Use the Socratic method to ask questions and guide the user to the answer
-5. Use a professional yet approachable tone
-6. Structure responses with clear headings and bullet points when appropriate
-7. If the context doesn't contain relevant information, clearly state this and suggest alternative resources
+CORE SOCRATIC PRINCIPLES:
+1. **Question First, Answer Later**: When a learner asks a question, respond with 2-3 probing questions that help them discover the answer themselves. Only provide direct information after they've attempted to think through it.
 
-When responding:
-- Prioritize information from the provided context
-- Be precise with medical terminology
-- Include relevant statistics or data when available
-- Suggest follow-up questions that might be helpful`;
+2. **Build on Prior Knowledge**: Reference what the learner has already mentioned or understood, and build questions that connect new concepts to their existing knowledge.
+
+3. **Gradual Revelation**: Break complex topics into smaller, manageable questions. Guide them step-by-step rather than overwhelming with information.
+
+4. **Encourage Critical Thinking**: Ask "why" and "how" questions that require analysis, not just recall. Challenge assumptions and encourage evidence-based reasoning.
+
+5. **Use the Medical Context Strategically**: When the learner struggles or asks for clarification, you may reference specific information from the provided medical literature context, but frame it as: "Based on the evidence, consider this..." rather than stating facts directly.
+
+RESPONSE STRUCTURE:
+- Start with 2-3 thoughtful questions that guide discovery
+- If the learner seems stuck, provide a hint or partial information, then ask another question
+- Only provide comprehensive answers after the learner has engaged with your questions
+- End responses with a follow-up question that deepens understanding or explores related concepts
+
+TONE:
+- Supportive and encouraging, like a mentor
+- Challenging but not condescending
+- Curious and intellectually engaged
+- Professional yet conversational
+
+EXCEPTIONS:
+- If the learner explicitly asks "just tell me" or "give me the answer directly," you may provide a direct answer, but still follow up with a question to deepen understanding
+- For safety-critical information, provide direct answers but immediately follow with questions to ensure comprehension
+
+Remember: Your goal is to develop the learner's thinking skills, not just transfer information. Make them work for understanding, but support them when they struggle.`;
 
 if (!OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set in environment variables');
@@ -116,16 +144,19 @@ chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
         }
 
         // Add current query with context
+        // Frame the question to encourage Socratic teaching approach
         messages.push({
             role: "user",
-            content: `Context from medical literature:\n${contextText}\n\nQuestion: ${message}`
+            content: `Medical Context Available:\n${contextText}\n\nLearner's Question: ${message}\n\nPlease respond using the Socratic method: ask guiding questions first to help the learner discover the answer, rather than providing it directly.`
         });
 
         // Generate response using OpenAI
+        // Temperature 0.7-0.8 works well for Socratic teaching: creative enough for varied questions,
+        // but focused enough to stay on topic. Higher (0.9+) = more creative but less focused.
         const completion = await openai.chat.completions.create({
             model: "gpt-4",
             messages: messages,
-            temperature: 0.7,
+            temperature: 0.75, // Slightly higher for more varied questioning approaches
         });
 
         const response = completion.choices[0].message.content || '';
