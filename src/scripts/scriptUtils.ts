@@ -1,6 +1,6 @@
 import { IngestResult } from './ingestArticles';
 import { VerificationResult } from './verifyIngestion';
-import { ChromaCheckResult } from './checkChroma';
+import { FirestoreCheckResult } from './checkFirestore';
 
 export type ScriptName = 'ingest' | 'verify' | 'check';
 
@@ -13,9 +13,6 @@ export type ScriptResult = {
     error?: string;
 }
 
-/**
- * Converts IngestResult to unified ScriptResult
- */
 export function convertIngestResult(result: IngestResult): ScriptResult {
     return {
         scriptName: 'ingest',
@@ -31,9 +28,6 @@ export function convertIngestResult(result: IngestResult): ScriptResult {
     };
 }
 
-/**
- * Converts VerificationResult to unified ScriptResult
- */
 export function convertVerifyResult(result: VerificationResult): ScriptResult {
     return {
         scriptName: 'verify',
@@ -50,20 +44,16 @@ export function convertVerifyResult(result: VerificationResult): ScriptResult {
     };
 }
 
-/**
- * Converts ChromaCheckResult to unified ScriptResult
- */
-export function convertCheckResult(result: ChromaCheckResult): ScriptResult {
-    const totalDocuments = result.collections.reduce((sum, collection) => sum + collection.documentCount, 0);
-    const successfulCollections = result.collections.length;
-    const failedCollections = result.errors.length;
+export function convertCheckResult(result: FirestoreCheckResult): ScriptResult {
+    const totalDocuments = result.collections.reduce((sum, c) => sum + c.documentCount, 0);
 
     return {
         scriptName: 'check',
         documentCount: totalDocuments,
-        successfulFiles: successfulCollections,
-        failedFiles: failedCollections,
+        successfulFiles: result.success ? result.collections.length : 0,
+        failedFiles: result.errors.length,
         data: {
+            isAvailable: result.isAvailable,
             collections: result.collections,
             errors: result.errors
         },

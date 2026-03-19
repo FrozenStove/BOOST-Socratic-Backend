@@ -1,10 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { ChromaClient } from 'chromadb';
-import { OpenAIEmbeddingFunction } from 'chromadb';
 import dotenv from 'dotenv';
 import pdfParse from 'pdf-parse';
-import { CHROMA_DB_URL, OPENAI_API_KEY } from '../constants';
+import { initializeFirestore, upsertArticleChunk } from '../services/firestore';
+import { generateEmbedding } from '../services/embeddings';
 
 console.log('Starting ingestion script...');
 
@@ -34,10 +33,8 @@ export interface FileResult {
     contentLength: number;
 }
 
-// Helper function to wait
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper function to recursively get all files
 async function getAllFiles(dir: string): Promise<string[]> {
     const files: string[] = [];
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -58,7 +55,6 @@ async function chunkText(text: string): Promise<string[]> {
     const chunks: string[] = [];
     let currentChunk = '';
 
-    // Split by paragraphs first
     const paragraphs = text.split(/\n\s*\n/);
 
     for (const paragraph of paragraphs) {
@@ -88,14 +84,20 @@ async function readFileContent(filePath: string): Promise<string> {
     }
 }
 
-async function addToCollectionWithRetry(collection: any, data: any, retryCount = 0): Promise<void> {
+async function upsertChunkWithRetry(
+    id: string,
+    content: string,
+    embedding: number[],
+    metadata: { source: string; category: string; format: string },
+    retryCount = 0
+): Promise<void> {
     try {
-        await collection.add(data);
+        await upsertArticleChunk(id, content, embedding, metadata);
     } catch (error: any) {
-        if (error.message?.includes('rate limit') && retryCount < MAX_RETRIES) {
-            console.log(`Rate limit hit, retrying in ${RETRY_DELAY / 1000} seconds... (Attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        if (retryCount < MAX_RETRIES) {
+            console.log(`Upsert failed, retrying in ${RETRY_DELAY / 1000}s... (${retryCount + 1}/${MAX_RETRIES})`);
             await wait(RETRY_DELAY);
-            return addToCollectionWithRetry(collection, data, retryCount + 1);
+            return upsertChunkWithRetry(id, content, embedding, metadata, retryCount + 1);
         }
         throw error;
     }
@@ -113,22 +115,8 @@ export async function ingestArticles(): Promise<IngestResult> {
     };
 
     try {
-        console.log('Initializing ChromaDB client...');
-        const chromaClient = new ChromaClient({
-            path: CHROMA_DB_URL
-        });
-
-        console.log('Initializing embedding function...');
-        const embeddingFunction = new OpenAIEmbeddingFunction({
-            openai_api_key: OPENAI_API_KEY,
-            openai_model: 'text-embedding-ada-002'
-        });
-
-        console.log('Getting or creating collection...');
-        const collection = await chromaClient.getOrCreateCollection({
-            name: 'medical_articles',
-            embeddingFunction
-        });
+        console.log('Initializing Firestore...');
+        await initializeFirestore();
 
         console.log('Reading articles directory...');
         const files = await getAllFiles(ARTICLES_DIR);
@@ -153,29 +141,27 @@ export async function ingestArticles(): Promise<IngestResult> {
             try {
                 const content = await readFileContent(filePath);
                 fileResult.contentLength = content.length;
-                console.log(`Read ${content.length} characters from ${filePath}`);
+                console.log(`Read ${content.length} characters`);
 
                 const chunks = await chunkText(content);
                 fileResult.chunks = chunks.length;
-                console.log(`Created ${chunks.length} chunks from ${filePath}`);
+                console.log(`Created ${chunks.length} chunks`);
 
                 const relativePath = path.relative(ARTICLES_DIR, filePath);
-                const ids = chunks.map((_, i) => `${relativePath}-${i}`);
-                const metadatas = chunks.map(() => ({
+                const metadata = {
                     source: relativePath,
-                    type: 'medical_article',
                     format: path.extname(filePath).slice(1),
                     category: path.dirname(relativePath)
-                }));
+                };
 
-                console.log(`Adding ${chunks.length} chunks to ChromaDB...`);
-                await addToCollectionWithRetry(collection, {
-                    ids,
-                    documents: chunks,
-                    metadatas
-                });
+                console.log(`Generating embeddings and upserting ${chunks.length} chunks to Firestore...`);
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunkId = `${relativePath}-${i}`;
+                    const embedding = await generateEmbedding(chunks[i]);
+                    await upsertChunkWithRetry(chunkId, chunks[i], embedding, metadata);
+                }
 
-                console.log(`Successfully added ${chunks.length} chunks from ${filePath}`);
+                console.log(`Successfully ingested ${chunks.length} chunks from ${filePath}`);
                 fileResult.success = true;
                 result.successfulFiles++;
                 result.totalChunks += chunks.length;
@@ -195,8 +181,7 @@ export async function ingestArticles(): Promise<IngestResult> {
         console.log('\nIngestion Summary:');
         console.log(`Successfully processed ${result.successfulFiles} files`);
         console.log(`Failed files: ${result.failedFiles}`);
-        console.log(`Total chunks added: ${result.totalChunks}`);
-        console.log('Ingestion completed!');
+        console.log(`Total chunks ingested: ${result.totalChunks}`);
 
         return result;
     } catch (error: any) {
@@ -207,4 +192,3 @@ export async function ingestArticles(): Promise<IngestResult> {
         return result;
     }
 }
-

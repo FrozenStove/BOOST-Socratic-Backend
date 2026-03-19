@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getChromaClient } from '../services/chroma';
-import { IncludeEnum, OpenAIEmbeddingFunction } from 'chromadb';
-import { OPENAI_API_KEY } from '../constants';
+import { getFirestore, upsertArticleChunk, getArticleCount } from '../services/firestore';
+import { generateEmbedding } from '../services/embeddings';
 
 const articlesRouter = Router();
 
@@ -15,26 +14,16 @@ const articleSchema = z.object({
 articlesRouter.post('/', async (req, res) => {
     try {
         const article = articleSchema.parse(req.body);
-        const chromaClient = getChromaClient();
-        const collection = await chromaClient.getCollection({
-            name: 'medical_articles',
-            embeddingFunction: new OpenAIEmbeddingFunction({
-                openai_api_key: OPENAI_API_KEY,
-                openai_model: 'text-embedding-ada-002'
-            })
+        const id = `manual-${Date.now()}`;
+        const embedding = await generateEmbedding(article.content);
+
+        await upsertArticleChunk(id, article.content, embedding, {
+            source: article.title,
+            category: 'manual',
+            format: 'text'
         });
 
-        // Add document to collection
-        await collection.add({
-            ids: [Date.now().toString()],
-            documents: [article.content],
-            metadatas: [{
-                title: article.title,
-                ...article.metadata
-            }]
-        });
-
-        res.status(201).json({ message: 'Article added successfully' });
+        res.status(201).json({ message: 'Article added successfully', id });
     } catch (error) {
         console.error('Error adding article:', error);
         res.status(500).json({ error: 'Failed to add article' });
@@ -43,24 +32,23 @@ articlesRouter.post('/', async (req, res) => {
 
 articlesRouter.get('/', async (req, res) => {
     try {
-        const chromaClient = getChromaClient();
-        const collection = await chromaClient.getCollection({
-            name: 'medical_articles',
-            embeddingFunction: new OpenAIEmbeddingFunction({
-                openai_api_key: OPENAI_API_KEY || '',
-                openai_model: 'text-embedding-ada-002'
-            })
-        });
+        const count = await getArticleCount();
+        const firestore = getFirestore();
+        const snapshot = await firestore.collection('medical_articles')
+            .select('source', 'category', 'format', 'updatedAt')
+            .limit(100)
+            .get();
 
-        const results = await collection.get({
-            include: [IncludeEnum.Metadatas, IncludeEnum.Documents]
-        });
+        const articles = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
 
-        res.json(results);
+        res.json({ count, articles });
     } catch (error) {
         console.error('Error fetching articles:', error);
         res.status(500).json({ error: 'Failed to fetch articles' });
     }
 });
 
-export default articlesRouter; 
+export default articlesRouter;

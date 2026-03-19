@@ -1,24 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { OpenAI } from 'openai';
-import { getChromaClient } from '../services/chroma';
-import { OpenAIEmbeddingFunction } from 'chromadb';
+import { queryVectors, logChat } from '../services/firestore';
+import { generateEmbedding } from '../services/embeddings';
 import { OPENAI_API_KEY } from '../constants';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { getPrismaClient } from '../services/database';
 
 const chatRouter = Router();
 
 /**
  * SOCRATIC TEACHING PROMPT
- * 
+ *
  * This prompt configures the AI to act as a Socratic teaching partner rather than
  * a simple Q&A system. The model will:
  * - Ask probing questions instead of giving direct answers
  * - Guide learners to discover answers themselves
  * - Build on prior knowledge through questioning
  * - Encourage critical thinking and evidence-based reasoning
- * 
+ *
  * To make responses more direct/less Socratic, modify this prompt or adjust
  * the user message format below.
  */
@@ -53,18 +52,7 @@ EXCEPTIONS:
 
 Remember: Your goal is to develop the learner's thinking skills, not just transfer information. Make them work for understanding, but support them when they struggle.`;
 
-if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY is not set in environment variables');
-}
-
-const openai = new OpenAI({
-    apiKey: OPENAI_API_KEY
-});
-
-const embeddingFunction = new OpenAIEmbeddingFunction({
-    openai_api_key: OPENAI_API_KEY,
-    openai_model: 'text-embedding-ada-002'
-});
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 const chatRequestSchema = z.object({
     message: z.string().min(1),
@@ -77,63 +65,33 @@ const chatRequestSchema = z.object({
 chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
     try {
         const { message, conversation } = chatRequestSchema.parse(req.body);
-        const userId = req.userId!; // Guaranteed by authenticateToken middleware (or bypass)
+        const userId = req.userId!;
 
-        console.log('🔍 Querying ChromaDB for:', message.substring(0, 100) + '...');
+        console.log('🔍 Generating query embedding with Vertex AI...');
+        const queryEmbedding = await generateEmbedding(message);
 
-        // Get relevant documents from ChromaDB
-        // Use getOrCreateCollection to handle case where collection doesn't exist yet
-        const chromaClient = getChromaClient();
-        const collection = await chromaClient.getOrCreateCollection({
-            name: 'medical_articles',
-            embeddingFunction
-        });
+        console.log('🔍 Querying Firestore vector search for:', message.substring(0, 100) + '...');
+        const documents = await queryVectors(queryEmbedding, 3);
 
-        // Query the vector database
-        const results = await collection.query({
-            queryTexts: [message],
-            nResults: 3
-        });
-
-        console.log('📊 ChromaDB Query Results:');
-        console.log('  - Has documents:', !!results.documents);
-        console.log('  - Documents array length:', results.documents?.length || 0);
-        console.log('  - First document array length:', results.documents?.[0]?.length || 0);
-        console.log('  - Has distances:', !!results.distances);
-        console.log('  - Distances array length:', results.distances?.length || 0);
-
-        const documents = results.documents?.[0] || [];
-        const distances = results.distances?.[0];
-
-        if (documents && documents.length > 0) {
-            console.log('  - Retrieved documents count:', documents.length);
+        if (documents.length > 0) {
+            console.log(`📊 Retrieved ${documents.length} documents from Firestore`);
             console.log('  - First document preview:', documents[0]?.substring(0, 200) + '...');
-            if (distances && distances.length > 0) {
-                console.log('  - Similarity scores:', distances.map(d => (1 - d).toFixed(3)));
-            }
         } else {
-            console.log('  ⚠️ No documents found in results!');
+            console.log('  ⚠️ No documents found in Firestore!');
             console.log('  💡 Tip: Run article ingestion to populate the knowledge base');
             console.log('     API: GET /api/scripts/ingest');
             console.log('     CLI: npm run ingest');
         }
 
-        // Prepare context from retrieved documents
-        const contextText = documents.length > 0 
-            ? documents.join('\n\n') 
-            : 'No relevant documents found in the knowledge base. The knowledge base may be empty - articles need to be ingested first.';
+        const contextText = documents.length > 0
+            ? documents.join('\n\n')
+            : 'No relevant documents found in the knowledge base. Articles need to be ingested first.';
 
-        // Build messages array with conversation history
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-            {
-                role: "system",
-                content: DEFAULT_SYSTEM_PROMPT
-            }
+            { role: 'system', content: DEFAULT_SYSTEM_PROMPT }
         ];
 
-        // Add conversation history if provided
         if (conversation && conversation.length > 0) {
-            // Add last 10 messages to avoid token limits
             const recentConversation = conversation.slice(-10);
             recentConversation.forEach(msg => {
                 messages.push({
@@ -143,52 +101,35 @@ chatRouter.post('/', authenticateToken, async (req: AuthRequest, res) => {
             });
         }
 
-        // Add current query with context
-        // Frame the question to encourage Socratic teaching approach
         messages.push({
-            role: "user",
+            role: 'user',
             content: `Medical Context Available:\n${contextText}\n\nLearner's Question: ${message}\n\nPlease respond using the Socratic method: ask guiding questions first to help the learner discover the answer, rather than providing it directly.`
         });
 
-        // Generate response using OpenAI
-        // Temperature 0.7-0.8 works well for Socratic teaching: creative enough for varied questions,
-        // but focused enough to stay on topic. Higher (0.9+) = more creative but less focused.
         const completion = await openai.chat.completions.create({
-            model: "gpt-4",
-            messages: messages,
-            temperature: 0.75, // Slightly higher for more varied questioning approaches
+            model: 'gpt-4',
+            messages,
+            temperature: 0.75,
         });
 
         const response = completion.choices[0].message.content || '';
         console.log('✅ Response generated successfully, length:', response.length);
 
-        // Save chat log to database (skip if in bypass mode or database unavailable)
+        // Log chat to Firestore (skip in bypass mode)
         if (userId !== 'bypass-user-id') {
-            const prisma = getPrismaClient();
-            if (prisma) {
-                try {
-                    await prisma.chat.create({
-                        data: {
-                            userId: userId,
-                            input: message,
-                            response: response
-                        }
-                    });
-                } catch (dbError) {
-                    console.error('Failed to save chat log:', dbError);
-                    // Don't fail the request if logging fails
-                }
+            try {
+                await logChat(userId, message, response);
+            } catch (dbError) {
+                console.error('Failed to save chat log:', dbError);
+                // Don't fail the request if logging fails
             }
         }
 
-        res.json({
-            response: response,
-            context: documents
-        });
+        res.json({ response, context: documents });
     } catch (error) {
         console.error('Chat error:', error);
         res.status(500).json({ error: 'Failed to process chat request' });
     }
 });
 
-export default chatRouter; 
+export default chatRouter;
