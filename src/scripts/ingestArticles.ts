@@ -13,6 +13,7 @@ const ARTICLES_DIR = path.join(__dirname, '../../articles');
 const CHUNK_SIZE = 1000; // Characters per chunk
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds
+const EMBEDDING_DELAY_MS = 200; // Delay between embedding calls to avoid rate limits
 
 // Types for structured results
 export interface IngestResult {
@@ -81,6 +82,19 @@ async function readFileContent(filePath: string): Promise<string> {
         return fs.readFile(filePath, 'utf-8');
     } else {
         throw new Error(`Unsupported file type: ${fileExtension}`);
+    }
+}
+
+async function generateEmbeddingWithRetry(text: string, retryCount = 0): Promise<number[]> {
+    try {
+        return await generateEmbedding(text);
+    } catch (error: any) {
+        if (retryCount < MAX_RETRIES) {
+            console.log(`Embedding failed, retrying in ${RETRY_DELAY / 1000}s... (${retryCount + 1}/${MAX_RETRIES}): ${error.message}`);
+            await wait(RETRY_DELAY);
+            return generateEmbeddingWithRetry(text, retryCount + 1);
+        }
+        throw error;
     }
 }
 
@@ -156,8 +170,10 @@ export async function ingestArticles(): Promise<IngestResult> {
 
                 console.log(`Generating embeddings and upserting ${chunks.length} chunks to Firestore...`);
                 for (let i = 0; i < chunks.length; i++) {
-                    const chunkId = `${relativePath}-${i}`;
-                    const embedding = await generateEmbedding(chunks[i]);
+                    // Firestore doc IDs cannot contain '/'. Replace path separators with '__'.
+                    const chunkId = `${relativePath.replace(/[\\/]/g, '__')}-${i}`;
+                    if (i > 0) await wait(EMBEDDING_DELAY_MS);
+                    const embedding = await generateEmbeddingWithRetry(chunks[i]);
                     await upsertChunkWithRetry(chunkId, chunks[i], embedding, metadata);
                 }
 
