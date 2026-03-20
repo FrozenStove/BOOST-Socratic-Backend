@@ -149,12 +149,6 @@ export const getOrCreateUser = async (
     return user;
 };
 
-export const getUserById = async (uid: string): Promise<UserRecord | null> => {
-    const firestore = getFirestore();
-    const doc = await firestore.collection(USERS_COLLECTION).doc(uid).get();
-    return doc.exists ? (doc.data() as UserRecord) : null;
-};
-
 // ---------------------------------------------------------------------------
 // Chat logging
 // ---------------------------------------------------------------------------
