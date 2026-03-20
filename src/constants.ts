@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 export const OPENAI_API_KEY: string = process.env.OPENAI_API_KEY || "";

@@ -2,10 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import { setupRoutes } from './routes';
 import { initializeFirestore } from './services/firestore';
-import config from 'config';
 
 const app = express();
-const port = config.get('port') || 3010;
+const port = process.env.PORT || 3010;
 
 app.use(cors());
 app.use(express.json());
